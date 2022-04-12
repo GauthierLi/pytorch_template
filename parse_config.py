@@ -9,7 +9,7 @@ from utils import read_json, write_json
 
 
 class ConfigParser:
-    def __init__(self, config, resume=None, modification=None, run_id=None):
+    def __init__(self, config, resume=None, modification=None, run_id=None, log_config='logger/logger_config.json'):
         """
         class to parse configuration json file. Handles hyperparameters for training, initializations of modules, checkpoint saving
         and logging module.
@@ -26,7 +26,7 @@ class ConfigParser:
         save_dir = Path(self.config['trainer']['save_dir'])
 
         exper_name = self.config['name']
-        if run_id is None: # use timestamp as default run-id
+        if run_id is None:  # use timestamp as default run-id
             run_id = datetime.now().strftime(r'%m%d_%H%M%S')
         if resume is not None:
             resume_id = str(resume).split('/')[-2]
@@ -45,7 +45,7 @@ class ConfigParser:
         write_json(self.config, self.save_dir / 'config.json')
 
         # configure logging module
-        setup_logging(self.log_dir)
+        setup_logging(self.log_dir, log_config=log_config)
         self.log_levels = {
             0: logging.WARNING,
             1: logging.INFO,
@@ -72,15 +72,18 @@ class ConfigParser:
             assert args.config is not None, msg_no_cfg
             resume = None
             cfg_fname = Path(args.config)
-        
+
         config = read_json(cfg_fname)
         if args.config and resume:
             # update new config for fine-tuning
             config.update(read_json(args.config))
 
         # parse custom cli options into dictionary
-        modification = {opt.target : getattr(args, _get_opt_name(opt.flags)) for opt in options}
-        return cls(config, resume, modification)
+        modification = {opt.target: getattr(args, _get_opt_name(opt.flags)) for opt in options}
+        try:
+            return cls(config, resume, modification, log_config=args.log_config)
+        except AttributeError:
+            return cls(config, resume, modification)
 
     def init_obj(self, name, module, *args, **kwargs):
         """
@@ -117,7 +120,8 @@ class ConfigParser:
         return self.config[name]
 
     def get_logger(self, name, verbosity=2):
-        msg_verbosity = 'verbosity option {} is invalid. Valid options are {}.'.format(verbosity, self.log_levels.keys())
+        msg_verbosity = 'verbosity option {} is invalid. Valid options are {}.'.format(verbosity,
+                                                                                       self.log_levels.keys())
         assert verbosity in self.log_levels, msg_verbosity
         logger = logging.getLogger(name)
         logger.setLevel(self.log_levels[verbosity])
@@ -136,6 +140,7 @@ class ConfigParser:
     def log_dir(self):
         return self._log_dir
 
+
 # helper functions to update config dict with custom cli options
 def _update_config(config, modification):
     if modification is None:
@@ -146,16 +151,19 @@ def _update_config(config, modification):
             _set_by_path(config, k, v)
     return config
 
+
 def _get_opt_name(flags):
     for flg in flags:
         if flg.startswith('--'):
             return flg.replace('--', '')
     return flags[0].replace('--', '')
 
+
 def _set_by_path(tree, keys, value):
     """Set a value in a nested object in tree by sequence of keys."""
     keys = keys.split(';')
     _get_by_path(tree, keys[:-1])[keys[-1]] = value
+
 
 def _get_by_path(tree, keys):
     """Access a nested object in tree by sequence of keys."""
